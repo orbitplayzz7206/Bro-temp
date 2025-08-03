@@ -1,4 +1,3 @@
-08.03 2:06 PM
 import discord, asyncio, sqlite3, os, zipfile, time, threading, schedule
 from discord.ext import commands
 from discord import app_commands
