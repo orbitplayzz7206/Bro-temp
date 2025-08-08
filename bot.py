@@ -2,8 +2,11 @@ import discord, asyncio, sqlite3, os, zipfile, time, threading, schedule
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta
+from openai import OpenAI  # ✅ New import
 
 TOKEN = ""
+
+client_ai = OpenAI(api_key="YOUR_OPENAI_API_KEY")  # ✅ Replace with your API Key
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -108,25 +111,23 @@ async def afk(interaction: discord.Interaction, reason: str = "AFK"):
     conn.commit()
     embed = discord.Embed(description=f" {interaction.user.mention} is now AFK: {reason}", color=0x00ffff)
     await interaction.response.send_message(embed=embed)
+
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    #  Remove AFK if user types
     c.execute("SELECT reason FROM afk WHERE user_id = ?", (message.author.id,))
     if c.fetchone():
         c.execute("DELETE FROM afk WHERE user_id = ?", (message.author.id,))
         conn.commit()
 
-    #  Notify if mentioned user is AFK
     for user in message.mentions:
         c.execute("SELECT reason FROM afk WHERE user_id = ?", (user.id,))
         result = c.fetchone()
         if result:
             await message.channel.send(f" {user.mention} is AFK: {result[0]}")
 
-    # ✏️ Custom Command Handler
     c.execute("SELECT * FROM commands")
     for prefix, cmd, msg, typ in c.fetchall():
         if message.content.strip() == prefix + cmd:
@@ -135,8 +136,25 @@ async def on_message(message):
             elif typ == "dm":
                 await message.author.send(msg)
 
-    # ✅ Allow normal commands to run
     await bot.process_commands(message)
+
+# 💡 AI Image Generator Command (fixed for OpenAI v1+)
+@tree.command(name="imagine", description="Generate an AI image from a prompt.")
+async def imagine(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer()
+    try:
+        response = client_ai.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size="512x512"
+        )
+        image_url = response.data[0].url
+        embed = discord.Embed(title="🧠 AI Image Generator", description=f"Prompt: `{prompt}`", color=0x00ffff)
+        embed.set_image(url=image_url)
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error generating image: {e}")
+
 # Cafe ☕️Money commands
 @tree.command(name="money")
 async def money(interaction: discord.Interaction, user: discord.User = None):
@@ -244,4 +262,5 @@ async def timeout(interaction: discord.Interaction, member: discord.Member, minu
     await member.timeout(until)
     embed = discord.Embed(description=f"⏱️ {member.mention} timed out for `{minutes}` minutes.", color=0x00ff00)
     await interaction.response.send_message(embed=embed)
+
 bot.run(TOKEN)
